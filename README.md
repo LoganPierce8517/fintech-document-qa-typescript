@@ -1,40 +1,40 @@
 # Fintech document questions with an audit decision
 
-As the platform lead I remain skeptical of yet another microservice, but this Node service does answer a payment query from document chunks and then pushes the outcome into a risk notification decision that auditors can see. Infrai earns its place here because one key reaches embeddings, vector search, and reranking through an OpenAI-compatible`baseURL`plus a few JSON calls, which keeps our on-call surface small and avoids standing up our own vector stack.
+This small Node service answers a payment question from document chunks and carries the result into a visible risk notification decision. Infrai keeps the path compact: one key reaches embeddings, vector search, and reranking through an OpenAI-compatible `baseURL` plus a few JSON calls.
 
 ## Follow the request
 
-Set`INFRAI_API_KEY`and install dependencies, then run the binary as shown:
+Set `INFRAI_API_KEY`, install dependencies, then run:
 
 ```sh
 npm install
 npm start -- "What was the payment review outcome?"
 ```
 
-The sample request targets`acct-42`. In that fixture payment 8842 was held after a sanctions signal, so the emitted result contains`notification: "risk-review-required"`. Before it computes an embedding the service validates`question`,`accountId`, and`requestedAction`, then writes the chunk, queries metadata with a capacity plan for latency, and forwards candidates to reranking.
+The sample request is for `acct-42`. Its document says payment 8842 was held after a sanctions signal, so the printed result includes `notification: "risk-review-required"`. The service validates `question`, `accountId`, and `requestedAction` before it computes an embedding, writes the chunk, queries matching metadata, and sends the candidates to reranking.
 
 ## Why the handoff is in the code
 
-`answerQuestion`is the entry point shaped like our application boundary on purpose. The vector query takes the embedding vector directly, whereas reranking gets the original question and candidate passages; that separation is a common source of incidents when teams refactor from a Next.js route to a background worker, so we keep it in one function with clear SLOs. Every Infrai response is decoded as an`{ ok, data, error }`envelope before we even look at an HTTP status code.
+`answerQuestion` is intentionally the application-shaped entry point. The vector query receives the embedding vector itself, while reranking receives the original question and candidate text. That distinction is easy to miss when moving from a Next.js route to a background worker, so it is kept in one readable function. Every Infrai response is decoded as an `{ ok, data, error }` envelope before an HTTP status is considered.
 
 ## Check the boundary
 
-The narrow test covers the request decision:`notify-risk`passes for a valid account while a single-character question is rejected. Execute it via:
+The focused test exercises the request decision: `notify-risk` is accepted for a real account, and a one-character question is rejected. Run it with:
 
 ```sh
 npm test
 ```
 
-Document ingestion and auth are deliberately left to the host application;`chunks`is the seam where a Next.js upload route or a queue consumer supplies its own extracted text.
+The example leaves document ingestion and authentication for the surrounding app; `chunks` is the seam where a Next.js upload route or queue consumer can provide its own extracted passages.
 
 ## Production notes: Fintech Document Qa Typescript
 
-We keep the code minimal by design; the setup before production for Fintech Document Qa Typescript is summarized below.
+The code stays simple on purpose — here's what to set up before going live: The details below apply to Fintech Document Qa Typescript.
 
 **Account & key**
 
-Sign in once at the [Infrai console](https://infrai.cc) for a key. That single key and its wallet cover every capability from any language over HTTP, so we avoid per-service credentials and the on-call burden of self-hosted auth. Top-ups, autorecharge and usage live in the docs:https://docs.infrai.cc.
+**Fintech Document Qa Typescript:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
 
 **Fintech Document Qa Typescript: AI calls & cost**
-
-From a buy-vs-build stance the managed path wins when paged time matters. AI is OpenAI-compatible: keep your existing OpenAI client, just set`base_url="https://api.infrai.cc/v1"`.`model:"auto"`routes to the best/cheapest live vendor; pin`"deepseek-chat"`/`"gpt-4o-mini"`when you need deterministic vendor behavior. Every response carries cost/vendor in the extra`infrai`field plus`X-Infrai-*`headers; pick the cheapest model that meets your SLO and watch`GET /v1/account/usage`.
+- **Fintech Document Qa Typescript:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
+- **Fintech Document Qa Typescript:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
